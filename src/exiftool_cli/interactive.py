@@ -1,0 +1,221 @@
+"""Interactive mode for exiftool-cli."""
+
+import os
+from pathlib import Path
+
+from .core import ExifTool, ExifError
+from .formatters import TableFormatter, JsonFormatter, CsvFormatter
+from .utils import (
+    Colors, success, error, warning, info, header, confirm,
+    validate_file, validate_folder, get_image_files,
+    ensure_directory, get_output_path, format_size, get_file_size_diff_str
+)
+
+
+class InteractiveMode:
+    """Interactive menu-driven interface."""
+    
+    def __init__(self):
+        self.current_dir = Path.cwd()
+        self.exif_tool = ExifTool()
+        self.selected_files = []
+    
+    def run(self):
+        """Run the interactive menu loop."""
+        self._show_banner()
+        
+        while True:
+            self._show_main_menu()
+            choice = input(f"{Colors.CYAN}Select option: {Colors.RESET}").strip()
+            
+            if choice == "1":
+                self._select_folder()
+            elif choice == "2":
+                self._select_files()
+            elif choice == "3":
+                self._extract_selected()
+            elif choice == "4":
+                self._export_selected()
+            elif choice == "5":
+                self._remove_selected()
+            elif choice == "6":
+                self._show_selected_files()
+            elif choice == "0":
+                print(f"\n{Colors.GREEN}Goodbye!{Colors.RESET}\n")
+                break
+            else:
+                warning("Invalid option. Try again.")
+    
+    def _show_banner(self):
+        """Display welcome banner."""
+        banner = f"""
+{Colors.BOLD}{Colors.CYAN}╔══════════════════════════════════════════╗{Colors.RESET}
+{Colors.BOLD}{Colors.CYAN}║        EXIFTOOL-CLI v1.0.0              ║{Colors.RESET}
+{Colors.BOLD}{Colors.CYAN}║   Extract, Export & Remove EXIF Data    ║{Colors.RESET}
+{Colors.BOLD}{Colors.CYAN}╚══════════════════════════════════════════╝{Colors.RESET}
+"""
+        print(banner)
+    
+    def _show_main_menu(self):
+        """Display main menu options."""
+        menu = f"""
+{Colors.BOLD}Main Menu{Colors.RESET}
+{'─' * 40}
+  {Colors.GREEN}[1]{Colors.RESET} Select folder
+  {Colors.GREEN}[2]{Colors.RESET} Select files
+  {Colors.GREEN}[3]{Colors.RESET} Extract EXIF
+  {Colors.GREEN}[4]{Colors.RESET} Export EXIF
+  {Colors.GREEN}[5]{Colors.RESET} Remove EXIF
+  {Colors.GREEN}[6]{Colors.RESET} Show selected files ({len(self.selected_files)})
+  {Colors.RED}[0]{Colors.RESET} Exit
+"""
+        print(menu)
+    
+    def _select_folder(self):
+        """Select a folder and list images."""
+        folder = input(f"{Colors.CYAN}Enter folder path (or Enter for current): {Colors.RESET}").strip()
+        
+        if not folder:
+            folder_path = self.current_dir
+        else:
+            folder_path = Path(folder)
+        
+        is_valid, err_msg = validate_folder(folder_path)
+        if not is_valid:
+            error(err_msg)
+            return
+        
+        files = get_image_files(folder_path, recursive=False)
+        
+        if not files:
+            warning(f"No images found in {folder_path}")
+            return
+        
+        info(f"Found {len(files)} images in {folder_path}")
+        print(f"\n{Colors.BOLD}Images:{Colors.RESET}")
+        
+        for i, f in enumerate(files[:20], 1):
+            print(f"  {Colors.YELLOW}[{i}]{Colors.RESET} {f.name}")
+        
+        if len(files) > 20:
+            print(f"  {Colors.DIM}... and {len(files) - 20} more{Colors.RESET}")
+        
+        select = input(f"\n{Colors.CYAN}Select files (1-{min(20, len(files))}) or 'a' for all: {Colors.RESET}").strip().lower()
+        
+        if select == "a":
+            self.selected_files = files
+            success(f"Selected all {len(files)} files")
+        else:
+            try:
+                indices = [int(x) for x in select.split(",")]
+                self.selected_files = [files[i - 1] for i in indices if 1 <= i <= len(files)]
+                success(f"Selected {len(self.selected_files)} files")
+            except (ValueError, IndexError):
+                warning("Invalid selection")
+    
+    def _select_files(self):
+        """Select individual files."""
+        path_input = input(f"{Colors.CYAN}Enter file paths (comma-separated): {Colors.RESET}").strip()
+        
+        if not path_input:
+            warning("No files specified")
+            return
+        
+        new_files = []
+        for path_str in path_input.split(","):
+            path = Path(path_str.strip())
+            is_valid, err_msg = validate_file(path)
+            if is_valid:
+                new_files.append(path)
+            else:
+                warning(f"Skipped {path}: {err_msg}")
+        
+        if new_files:
+            self.selected_files.extend(new_files)
+            success(f"Added {len(new_files)} files (total: {len(self.selected_files)})")
+    
+    def _show_selected_files(self):
+        """Display currently selected files."""
+        if not self.selected_files:
+            warning("No files selected")
+            return
+        
+        print(f"\n{Colors.BOLD}Selected Files ({len(self.selected_files)}):{Colors.RESET}")
+        for i, f in enumerate(self.selected_files, 1):
+            print(f"  {Colors.YELLOW}[{i}]{Colors.RESET} {f}")
+    
+    def _extract_selected(self):
+        """Extract EXIF from selected files."""
+        if not self.selected_files:
+            warning("No files selected. Use options 1 or 2 first.")
+            return
+        
+        formatter = TableFormatter()
+        
+        for file_path in self.selected_files:
+            try:
+                exif_data = self.exif_tool.extract(file_path)
+                output = formatter.format(exif_data, file_path.name)
+                print(output)
+            except ExifError as e:
+                warning(f"Skipped {file_path.name}: {e}")
+    
+    def _export_selected(self):
+        """Export EXIF from selected files."""
+        if not self.selected_files:
+            warning("No files selected. Use options 1 or 2 first.")
+            return
+        
+        fmt = input(f"{Colors.CYAN}Export format (json/csv) [json]: {Colors.RESET}").strip().lower() or "json"
+        
+        if fmt not in {"json", "csv"}:
+            error("Invalid format. Use 'json' or 'csv'")
+            return
+        
+        out_dir = input(f"{Colors.CYAN}Output directory [./]: {Colors.RESET}").strip()
+        output_dir = Path(out_dir) if out_dir else Path("./")
+        ensure_directory(output_dir)
+        
+        for file_path in self.selected_files:
+            try:
+                exif_data = self.exif_tool.extract(file_path)
+                out_path = output_dir / f"{file_path.stem}.{fmt}"
+                
+                if fmt == "json":
+                    formatter = JsonFormatter()
+                    formatter.to_file(exif_data, file_path.name, out_path)
+                else:
+                    formatter = CsvFormatter()
+                    formatter.to_file(exif_data, file_path.name, out_path)
+                
+                success(f"Exported {file_path.name} → {out_path}")
+            except ExifError as e:
+                warning(f"Failed {file_path.name}: {e}")
+    
+    def _remove_selected(self):
+        """Remove EXIF from selected files."""
+        if not self.selected_files:
+            warning("No files selected. Use options 1 or 2 first.")
+            return
+        
+        keep_gps = confirm("Keep GPS data?", default=False)
+        
+        out_dir = input(f"{Colors.CYAN}Output directory [./]: {Colors.RESET}").strip()
+        output_dir = Path(out_dir) if out_dir else Path("./")
+        ensure_directory(output_dir)
+        
+        if not confirm(f"Remove EXIF from {len(self.selected_files)} files?", default=False):
+            info("Cancelled")
+            return
+        
+        for file_path in self.selected_files:
+            try:
+                out_path = output_dir / f"{file_path.stem}_clean{file_path.suffix}"
+                self.exif_tool.remove(file_path, out_path, keep_gps=keep_gps)
+                
+                size_info = get_file_size_diff_str(file_path, out_path)
+                success(f"Removed {file_path.name} → {out_path.name}")
+                if size_info:
+                    print(f"    {Colors.DIM}Size: {size_info}{Colors.RESET}")
+            except ExifError as e:
+                warning(f"Failed {file_path.name}: {e}")
