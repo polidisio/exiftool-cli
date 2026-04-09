@@ -1,13 +1,9 @@
 """Interactive mode for exiftool-cli."""
 
+import os
+import subprocess
+import sys
 from pathlib import Path
-
-try:
-    import tkinter as tk
-    from tkinter import filedialog
-    TKINTER_AVAILABLE = True
-except ImportError:
-    TKINTER_AVAILABLE = False
 
 from .core import ExifTool, ExifError
 from .formatters import TableFormatter, JsonFormatter, CsvFormatter
@@ -17,6 +13,15 @@ from .utils import (
     ensure_directory, get_output_path, format_size, get_file_size_diff_str,
     SUPPORTED_EXTENSIONS
 )
+
+TKINTER_AVAILABLE = False
+
+try:
+    import tkinter as tk
+    from tkinter import filedialog
+    TKINTER_AVAILABLE = True
+except ImportError:
+    pass
 
 
 class InteractiveMode:
@@ -166,6 +171,23 @@ class InteractiveMode:
             if new_files:
                 self.selected_files.extend(new_files)
                 success(f"Added {len(new_files)} file(s) (total: {len(self.selected_files)})")
+        elif sys.platform == "darwin":
+            paths = self._open_file_dialog_applescript()
+            if not paths:
+                info("No files selected")
+                return
+
+            new_files = []
+            for path in paths:
+                is_valid, err_msg = validate_file(path)
+                if is_valid:
+                    new_files.append(path)
+                else:
+                    warning(f"Skipped {path}: {err_msg}")
+
+            if new_files:
+                self.selected_files.extend(new_files)
+                success(f"Added {len(new_files)} file(s) (total: {len(self.selected_files)})")
         else:
             path_input = input(f"{Colors.CYAN}Enter file path: {Colors.RESET}").strip()
             if not path_input:
@@ -179,6 +201,33 @@ class InteractiveMode:
                 success(f"Selected {path.name}")
             else:
                 error(err_msg)
+
+    def _open_file_dialog_applescript(self):
+        """Open file dialog using AppleScript on macOS."""
+        extensions = " ".join(f"*{ext}" for ext in SUPPORTED_EXTENSIONS)
+        script = (
+            f'set fileTypes to {{"{extensions}"}}\n'
+            'set chosenFiles to (choose file of type fileTypes with multiple selections allowed)\n'
+            'set chosenPaths to {{}}\n'
+            'repeat with aFile in chosenFiles\n'
+            '    set end of chosenPaths to POSIX path of aFile\n'
+            'end repeat\n'
+            'set AppleScript\'s text item delimiters to {"|"}\n'
+            'chosenPaths as string'
+        )
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                paths = result.stdout.strip().split("|")
+                return [Path(p.strip()) for p in paths if p.strip()]
+        except Exception:
+            pass
+        return []
     
     def _show_selected_files(self):
         """Display currently selected files."""
