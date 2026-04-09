@@ -1,8 +1,13 @@
 """Interactive mode for exiftool-cli."""
 
-import tkinter as tk
-from tkinter import filedialog
 from pathlib import Path
+
+try:
+    import tkinter as tk
+    from tkinter import filedialog
+    TKINTER_AVAILABLE = True
+except ImportError:
+    TKINTER_AVAILABLE = False
 
 from .core import ExifTool, ExifError
 from .formatters import TableFormatter, JsonFormatter, CsvFormatter
@@ -127,39 +132,53 @@ class InteractiveMode:
             success(f"Added {len(new_files)} files (total: {len(self.selected_files)})")
     
     def _select_photo(self):
-        """Select a photo using native file picker dialog."""
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        
-        filetypes = []
-        for ext in SUPPORTED_EXTENSIONS:
-            filetypes.append((f"*{ext}", f"*{ext}"))
-        
-        file_paths = filedialog.askopenfilenames(
-            parent=root,
-            title="Select Photo(s)",
-            filetypes=filetypes
-        )
-        
-        root.destroy()
-        
-        if not file_paths:
-            info("No files selected")
-            return
-        
-        new_files = []
-        for path_str in file_paths:
-            path = Path(path_str)
+        """Select a photo using native file picker dialog or console input."""
+        if TKINTER_AVAILABLE:
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+
+            filetypes = []
+            for ext in SUPPORTED_EXTENSIONS:
+                filetypes.append((f"*{ext}", f"*{ext}"))
+
+            file_paths = filedialog.askopenfilenames(
+                parent=root,
+                title="Select Photo(s)",
+                filetypes=filetypes
+            )
+
+            root.destroy()
+
+            if not file_paths:
+                info("No files selected")
+                return
+
+            new_files = []
+            for path_str in file_paths:
+                path = Path(path_str)
+                is_valid, err_msg = validate_file(path)
+                if is_valid:
+                    new_files.append(path)
+                else:
+                    warning(f"Skipped {path}: {err_msg}")
+
+            if new_files:
+                self.selected_files.extend(new_files)
+                success(f"Added {len(new_files)} file(s) (total: {len(self.selected_files)})")
+        else:
+            path_input = input(f"{Colors.CYAN}Enter file path: {Colors.RESET}").strip()
+            if not path_input:
+                warning("No file specified")
+                return
+
+            path = Path(path_input)
             is_valid, err_msg = validate_file(path)
             if is_valid:
-                new_files.append(path)
+                self.selected_files.append(path)
+                success(f"Selected {path.name}")
             else:
-                warning(f"Skipped {path}: {err_msg}")
-        
-        if new_files:
-            self.selected_files.extend(new_files)
-            success(f"Added {len(new_files)} file(s) (total: {len(self.selected_files)})")
+                error(err_msg)
     
     def _show_selected_files(self):
         """Display currently selected files."""
