@@ -1,6 +1,10 @@
 """Entry point for exiftool-cli."""
 
-from .cli import main
+import sys
+from .cli import main, InteractiveMode
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) == 1:
+        InteractiveMode().run()
+    else:
+        main()
