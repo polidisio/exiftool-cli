@@ -17,7 +17,7 @@ from .utils import (
 from .interactive import InteractiveMode
 
 
-@click.group()
+@click.group(invoke_without_command=True)
 @click.version_option(version="1.0.0", prog_name="exiftool-cli")
 def main():
     """EXIF metadata CLI tool - Extract, export, and remove EXIF data from images."""
