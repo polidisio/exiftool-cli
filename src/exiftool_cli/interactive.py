@@ -205,11 +205,9 @@ class InteractiveMode:
 
     def _open_file_dialog_applescript(self):
         """Open file dialog using AppleScript on macOS."""
-        extensions = " ".join(f"*{ext}" for ext in SUPPORTED_EXTENSIONS)
         script = (
-            f'set fileTypes to {{"{extensions}"}}\n'
-            'set chosenFiles to (choose file of type fileTypes with multiple selections allowed)\n'
-            'set chosenPaths to {{}}\n'
+            'set chosenFiles to (choose file with multiple selections allowed)\n'
+            'set chosenPaths to {}\n'
             'repeat with aFile in chosenFiles\n'
             '    set end of chosenPaths to POSIX path of aFile\n'
             'end repeat\n'
@@ -221,7 +219,7 @@ class InteractiveMode:
                 ["osascript", "-e", script],
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=60
             )
             if result.returncode == 0 and result.stdout.strip():
                 paths = result.stdout.strip().split("|")
