@@ -1,6 +1,7 @@
 """Interactive mode for exiftool-cli."""
 
-import os
+import tkinter as tk
+from tkinter import filedialog
 from pathlib import Path
 
 from .core import ExifTool, ExifError
@@ -8,7 +9,8 @@ from .formatters import TableFormatter, JsonFormatter, CsvFormatter
 from .utils import (
     Colors, success, error, warning, info, header, confirm,
     validate_file, validate_folder, get_image_files,
-    ensure_directory, get_output_path, format_size, get_file_size_diff_str
+    ensure_directory, get_output_path, format_size, get_file_size_diff_str,
+    SUPPORTED_EXTENSIONS
 )
 
 
@@ -23,28 +25,17 @@ class InteractiveMode:
     def run(self):
         """Run the interactive menu loop."""
         self._show_banner()
-        
+        self.selected_files = []
+
         while True:
-            self._show_main_menu()
-            choice = input(f"{Colors.CYAN}Select option: {Colors.RESET}").strip()
-            
-            if choice == "1":
-                self._select_folder()
-            elif choice == "2":
-                self._select_files()
-            elif choice == "3":
-                self._extract_selected()
-            elif choice == "4":
-                self._export_selected()
-            elif choice == "5":
-                self._remove_selected()
-            elif choice == "6":
-                self._show_selected_files()
-            elif choice == "0":
-                print(f"\n{Colors.GREEN}Goodbye!{Colors.RESET}\n")
+            self._select_photo()
+
+            if not self.selected_files:
                 break
-            else:
-                warning("Invalid option. Try again.")
+
+            self._show_exif_preview()
+
+            self._show_simple_menu()
     
     def _show_banner(self):
         """Display welcome banner."""
@@ -61,12 +52,13 @@ class InteractiveMode:
         menu = f"""
 {Colors.BOLD}Main Menu{Colors.RESET}
 {'─' * 40}
-  {Colors.GREEN}[1]{Colors.RESET} Select folder
-  {Colors.GREEN}[2]{Colors.RESET} Select files
-  {Colors.GREEN}[3]{Colors.RESET} Extract EXIF
-  {Colors.GREEN}[4]{Colors.RESET} Export EXIF
-  {Colors.GREEN}[5]{Colors.RESET} Remove EXIF
-  {Colors.GREEN}[6]{Colors.RESET} Show selected files ({len(self.selected_files)})
+  {Colors.GREEN}[1]{Colors.RESET} Select photo
+  {Colors.GREEN}[2]{Colors.RESET} Select folder
+  {Colors.GREEN}[3]{Colors.RESET} Select files
+  {Colors.GREEN}[4]{Colors.RESET} Extract EXIF
+  {Colors.GREEN}[5]{Colors.RESET} Export EXIF
+  {Colors.GREEN}[6]{Colors.RESET} Remove EXIF
+  {Colors.GREEN}[7]{Colors.RESET} Show selected files ({len(self.selected_files)})
   {Colors.RED}[0]{Colors.RESET} Exit
 """
         print(menu)
@@ -134,6 +126,41 @@ class InteractiveMode:
             self.selected_files.extend(new_files)
             success(f"Added {len(new_files)} files (total: {len(self.selected_files)})")
     
+    def _select_photo(self):
+        """Select a photo using native file picker dialog."""
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        
+        filetypes = []
+        for ext in SUPPORTED_EXTENSIONS:
+            filetypes.append((f"*{ext}", f"*{ext}"))
+        
+        file_paths = filedialog.askopenfilenames(
+            parent=root,
+            title="Select Photo(s)",
+            filetypes=filetypes
+        )
+        
+        root.destroy()
+        
+        if not file_paths:
+            info("No files selected")
+            return
+        
+        new_files = []
+        for path_str in file_paths:
+            path = Path(path_str)
+            is_valid, err_msg = validate_file(path)
+            if is_valid:
+                new_files.append(path)
+            else:
+                warning(f"Skipped {path}: {err_msg}")
+        
+        if new_files:
+            self.selected_files.extend(new_files)
+            success(f"Added {len(new_files)} file(s) (total: {len(self.selected_files)})")
+    
     def _show_selected_files(self):
         """Display currently selected files."""
         if not self.selected_files:
@@ -147,7 +174,7 @@ class InteractiveMode:
     def _extract_selected(self):
         """Extract EXIF from selected files."""
         if not self.selected_files:
-            warning("No files selected. Use options 1 or 2 first.")
+            warning("No files selected. Use options 1, 2, or 3 first.")
             return
         
         formatter = TableFormatter()
@@ -163,7 +190,7 @@ class InteractiveMode:
     def _export_selected(self):
         """Export EXIF from selected files."""
         if not self.selected_files:
-            warning("No files selected. Use options 1 or 2 first.")
+            warning("No files selected. Use options 1, 2, or 3 first.")
             return
         
         fmt = input(f"{Colors.CYAN}Export format (json/csv) [json]: {Colors.RESET}").strip().lower() or "json"
@@ -195,7 +222,7 @@ class InteractiveMode:
     def _remove_selected(self):
         """Remove EXIF from selected files."""
         if not self.selected_files:
-            warning("No files selected. Use options 1 or 2 first.")
+            warning("No files selected. Use options 1, 2, or 3 first.")
             return
         
         keep_gps = confirm("Keep GPS data?", default=False)
@@ -219,3 +246,36 @@ class InteractiveMode:
                     print(f"    {Colors.DIM}Size: {size_info}{Colors.RESET}")
             except ExifError as e:
                 warning(f"Failed {file_path.name}: {e}")
+
+    def _show_exif_preview(self):
+        """Show EXIF preview for selected files."""
+        formatter = TableFormatter()
+        for file_path in self.selected_files:
+            try:
+                exif_data = self.exif_tool.extract(file_path)
+                output = formatter.format(exif_data, file_path.name)
+                print(output)
+            except ExifError as e:
+                warning(f"Skipped {file_path.name}: {e}")
+
+    def _show_simple_menu(self):
+        """Display simple menu after file selection."""
+        print(f"""
+{Colors.BOLD}What would you like to do?{Colors.RESET}
+{'─' * 40}
+  {Colors.GREEN}[1]{Colors.RESET} Select more photos
+  {Colors.GREEN}[2]{Colors.RESET} Export EXIF (JSON/CSV)
+  {Colors.GREEN}[3]{Colors.RESET} Remove EXIF
+  {Colors.RED}[0]{Colors.RESET} Exit
+""")
+        choice = input(f"{Colors.CYAN}Select option: {Colors.RESET}").strip()
+
+        if choice == "1":
+            pass
+        elif choice == "2":
+            self._export_selected()
+        elif choice == "3":
+            self._remove_selected()
+        else:
+            info("Exiting...")
+            self.selected_files = []
