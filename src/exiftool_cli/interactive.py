@@ -41,7 +41,8 @@ class InteractiveMode:
             self._select_photo()
 
             if not self.selected_files:
-                break
+                print(f"\n{Colors.GREEN}Goodbye!{Colors.RESET}\n")
+                return
 
             self._show_exif_preview()
 

@@ -24,17 +24,6 @@ def main():
     pass
 
 
-def main_interactive():
-    """Launch interactive mode when no subcommand is used."""
-    InteractiveMode().run()
-
-
-if __name__ == "__main__" and len(sys.argv) == 1:
-    main_interactive()
-else:
-    main()
-
-
 @main.command()
 @click.argument("photo", type=click.Path(exists=True))
 def extract(photo):
