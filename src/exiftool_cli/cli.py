@@ -19,9 +19,11 @@ from .interactive import InteractiveMode
 
 @click.group(invoke_without_command=True)
 @click.version_option(version="1.0.0", prog_name="exiftool-cli")
-def main():
+@click.pass_context
+def main(ctx):
     """EXIF metadata CLI tool - Extract, export, and remove EXIF data from images."""
-    InteractiveMode().run()
+    if ctx.invoked_subcommand is None:
+        InteractiveMode().run()
 
 
 @main.command()
