@@ -28,8 +28,9 @@ class Colors:
         MAGENTA = Fore.MAGENTA
         BOLD = Style.BRIGHT
         RESET = Style.RESET_ALL
+        DIM = Style.DIM
     else:
-        GREEN = RED = YELLOW = BLUE = CYAN = MAGENTA = BOLD = RESET = ""
+        GREEN = RED = YELLOW = BLUE = CYAN = MAGENTA = BOLD = RESET = DIM = ""
 
 
 def success(msg: str) -> None:
