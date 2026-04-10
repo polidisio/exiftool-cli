@@ -38,15 +38,20 @@ class InteractiveMode:
         self.selected_files = []
 
         while True:
-            self._select_photo()
+            self._show_main_menu()
+            choice = input(f"{Colors.CYAN}Select option: {Colors.RESET}").strip()
 
-            if not self.selected_files:
+            if choice == "1":
+                self._select_photo()
+            elif choice == "2":
+                self._show_exif_preview()
+            elif choice == "3":
+                self._export_selected()
+            elif choice == "4":
+                self._remove_selected()
+            elif choice == "0":
                 print(f"\n{Colors.GREEN}Goodbye!{Colors.RESET}\n")
-                return
-
-            self._show_exif_preview()
-
-            self._show_simple_menu()
+                break
     
     def _show_banner(self):
         """Display welcome banner."""
@@ -60,16 +65,16 @@ class InteractiveMode:
     
     def _show_main_menu(self):
         """Display main menu options."""
+        selected_info = f"{len(self.selected_files)} file(s)" if self.selected_files else "None"
         menu = f"""
 {Colors.BOLD}Main Menu{Colors.RESET}
 {'─' * 40}
-  {Colors.GREEN}[1]{Colors.RESET} Select photo
-  {Colors.GREEN}[2]{Colors.RESET} Select folder
-  {Colors.GREEN}[3]{Colors.RESET} Select files
-  {Colors.GREEN}[4]{Colors.RESET} Extract EXIF
-  {Colors.GREEN}[5]{Colors.RESET} Export EXIF
-  {Colors.GREEN}[6]{Colors.RESET} Remove EXIF
-  {Colors.GREEN}[7]{Colors.RESET} Show selected files ({len(self.selected_files)})
+  Selected: {selected_info}
+
+  {Colors.GREEN}[1]{Colors.RESET} Select photos (file explorer)
+  {Colors.GREEN}[2]{Colors.RESET} Show EXIF preview
+  {Colors.GREEN}[3]{Colors.RESET} Export EXIF
+  {Colors.GREEN}[4]{Colors.RESET} Remove EXIF
   {Colors.RED}[0]{Colors.RESET} Exit
 """
         print(menu)
@@ -227,6 +232,25 @@ class InteractiveMode:
         except Exception:
             pass
         return []
+
+    def _open_folder_dialog_applescript(self):
+        """Open folder dialog using AppleScript on macOS."""
+        script = (
+            'set selectedFolder to (choose folder)\n'
+            'POSIX path of selectedFolder'
+        )
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return Path(result.stdout.strip())
+        except Exception:
+            pass
+        return None
     
     def _show_selected_files(self):
         """Display currently selected files."""
@@ -257,7 +281,7 @@ class InteractiveMode:
     def _export_selected(self):
         """Export EXIF from selected files."""
         if not self.selected_files:
-            warning("No files selected. Use options 1, 2, or 3 first.")
+            warning("No files selected. Use option 1 first.")
             return
         
         fmt = input(f"{Colors.CYAN}Export format (json/csv) [json]: {Colors.RESET}").strip().lower() or "json"
@@ -266,8 +290,17 @@ class InteractiveMode:
             error("Invalid format. Use 'json' or 'csv'")
             return
         
-        out_dir = input(f"{Colors.CYAN}Output directory [./]: {Colors.RESET}").strip()
-        output_dir = Path(out_dir) if out_dir else Path("./")
+        use_browser = input(f"{Colors.CYAN}Use file explorer for output? [y/N]: {Colors.RESET}").strip().lower() == "y"
+        
+        if use_browser and sys.platform == "darwin":
+            output_dir = self._open_folder_dialog_applescript()
+            if output_dir is None:
+                info("Using current directory")
+                output_dir = Path("./")
+        else:
+            out_dir = input(f"{Colors.CYAN}Output directory [./]: {Colors.RESET}").strip()
+            output_dir = Path(out_dir) if out_dir else Path("./")
+        
         ensure_directory(output_dir)
         
         for file_path in self.selected_files:
@@ -289,13 +322,22 @@ class InteractiveMode:
     def _remove_selected(self):
         """Remove EXIF from selected files."""
         if not self.selected_files:
-            warning("No files selected. Use options 1, 2, or 3 first.")
+            warning("No files selected. Use option 1 first.")
             return
         
         keep_gps = confirm("Keep GPS data?", default=False)
         
-        out_dir = input(f"{Colors.CYAN}Output directory [./]: {Colors.RESET}").strip()
-        output_dir = Path(out_dir) if out_dir else Path("./")
+        use_browser = input(f"{Colors.CYAN}Use file explorer for output? [y/N]: {Colors.RESET}").strip().lower() == "y"
+        
+        if use_browser and sys.platform == "darwin":
+            output_dir = self._open_folder_dialog_applescript()
+            if output_dir is None:
+                info("Using current directory")
+                output_dir = Path("./")
+        else:
+            out_dir = input(f"{Colors.CYAN}Output directory [./]: {Colors.RESET}").strip()
+            output_dir = Path(out_dir) if out_dir else Path("./")
+        
         ensure_directory(output_dir)
         
         if not confirm(f"Remove EXIF from {len(self.selected_files)} files?", default=False):
@@ -324,25 +366,3 @@ class InteractiveMode:
                 print(output)
             except ExifError as e:
                 warning(f"Skipped {file_path.name}: {e}")
-
-    def _show_simple_menu(self):
-        """Display simple menu after file selection."""
-        print(f"""
-{Colors.BOLD}What would you like to do?{Colors.RESET}
-{'─' * 40}
-  {Colors.GREEN}[1]{Colors.RESET} Select more photos
-  {Colors.GREEN}[2]{Colors.RESET} Export EXIF (JSON/CSV)
-  {Colors.GREEN}[3]{Colors.RESET} Remove EXIF
-  {Colors.RED}[0]{Colors.RESET} Exit
-""")
-        choice = input(f"{Colors.CYAN}Select option: {Colors.RESET}").strip()
-
-        if choice == "1":
-            pass
-        elif choice == "2":
-            self._export_selected()
-        elif choice == "3":
-            self._remove_selected()
-        else:
-            info("Exiting...")
-            self.selected_files = []
