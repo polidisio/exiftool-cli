@@ -1,6 +1,8 @@
-# exiftool-cli
+# imgmeta
 
-CLI tool for extracting, exporting, and removing EXIF metadata from photos.
+Personal CLI tool for extracting, exporting, and removing EXIF metadata from photos.
+
+> **Note:** This tool uses [Piexif](https://github.com/hMatoba/Piexif) internally — it is not related to the Perl-based [exiftool](https://exiftool.org/). The name reflects its functionality, not the underlying library.
 
 ## Features
 
@@ -16,31 +18,31 @@ CLI tool for extracting, exporting, and removing EXIF metadata from photos.
 ### macOS (Homebrew) - Recommended
 
 ```bash
-brew install polidisio/tap/exiftool-cli
+brew install polidisio/tap/imgmeta
 ```
 
-### pip
+### pip / uv
 
 ```bash
-pip install exiftool-cli
+uv tool install imgmeta
 ```
 
 ### From Source
 
 ```bash
 git clone https://github.com/polidisio/exiftool-cli.git
-cd exiftool-cli
-pip install -e .
+cd imgmeta
+uv tool install -e .
 ```
 
 ## Usage
 
 ### Interactive Mode (Recommended)
 
-Simply run `exiftool-cli` without arguments to launch the interactive menu:
+Simply run `imgmeta` without arguments to launch the interactive menu:
 
 ```bash
-exiftool-cli
+imgmeta
 ```
 
 You'll see:
@@ -75,7 +77,7 @@ Select option:
 #### Extract EXIF
 
 ```bash
-exiftool-cli extract photo.jpg
+imgmeta extract photo.jpg
 ```
 
 Output:
@@ -112,41 +114,41 @@ Exposure
 #### Export to JSON
 
 ```bash
-exiftool-cli export photo.jpg -o output.json
+imgmeta export photo.jpg -o output.json
 ```
 
 #### Export to CSV
 
 ```bash
-exiftool-cli export photo.jpg -o output.csv
+imgmeta export photo.jpg -o output.csv
 ```
 
 #### Remove EXIF
 
 ```bash
-exiftool-cli remove photo.jpg -o clean_photo.jpg
+imgmeta remove photo.jpg -o clean_photo.jpg
 ```
 
 #### Remove EXIF but keep GPS
 
 ```bash
-exiftool-cli remove photo.jpg --keep-gps -o clean_photo.jpg
+imgmeta remove photo.jpg --keep-gps -o clean_photo.jpg
 ```
 
 #### Batch Process
 
 ```bash
 # Extract EXIF from all photos in a folder
-exiftool-cli batch --folder /path/to/photos --extract
+imgmeta batch --folder /path/to/photos --extract
 
 # Remove EXIF from all photos
-exiftool-cli batch --folder /path/to/photos --remove
+imgmeta batch --folder /path/to/photos --remove
 
 # Export metadata to CSV
-exiftool-cli batch --folder /path/to/photos --export csv -o metadata.csv
+imgmeta batch --folder /path/to/photos --export csv -o metadata.csv
 
 # Process recursively
-exiftool-cli batch --folder /path/to/photos --recursive --remove
+imgmeta batch --folder /path/to/photos --recursive --remove
 ```
 
 ## Command Line Options
@@ -175,7 +177,7 @@ exiftool-cli batch --folder /path/to/photos --recursive --remove
 ```bash
 # Clone the repository
 git clone https://github.com/polidisio/exiftool-cli.git
-cd exiftool-cli
+cd imgmeta
 
 # Install dependencies
 pip install -e ".[dev]"
